@@ -473,9 +473,67 @@ void Write(JSONWriter& out, const aiNode& ai, bool is_elem = true)
 		}
 		out.EndArray();
 	}
-
+    
+    if(ai.mMetaData) {
+        out.Key("metadata");
+        out.StartArray();
+        for(unsigned int i = 0; i < ai.mMetaData->mNumProperties; ++i) {
+            
+            out.StartObj(true);
+            
+            out.Key("key");
+            out.SimpleValue(ai.mMetaData->mKeys[i]);
+            
+            out.Key("value");
+            
+            //used in the switch, declared outside:
+            bool tempbool;
+            int tempint;
+            uint64_t tempu64;
+            float tempfloat;
+            aiString tempstring;
+            aiVector3D tempvec;
+            
+            switch(ai.mMetaData->mValues[i].mType)
+            {
+                case AI_BOOL:
+                    ai.mMetaData->Get<bool>(i, tempbool);
+                    out.SimpleValue(tempbool);
+                    break;
+                case AI_INT:
+                    ai.mMetaData->Get<int>(i, tempint);
+                    out.SimpleValue(tempint);
+                    break;
+                case AI_UINT64:
+                    ai.mMetaData->Get<uint64_t>(i, tempu64);
+                    out.SimpleValue(tempu64);
+                    break;
+                case AI_FLOAT:
+                    ai.mMetaData->Get<float>(i, tempfloat);
+                    out.SimpleValue(tempint);
+                    break;
+                case AI_AISTRING:
+                    ai.mMetaData->Get<aiString>(i, tempstring);
+                    out.SimpleValue(tempstring);
+                    break;
+                case AI_AIVECTOR3D:
+                    ai.mMetaData->Get<aiVector3D>(i, tempvec);
+                    out.StartArray();
+                    out.Element(tempvec.x);
+                    out.Element(tempvec.y);
+                    out.Element(tempvec.z);
+                    break;
+                default:
+                    assert(false);
+            }
+            out.EndObj();
+        }
+        out.EndArray();
+    }
+    
 	out.EndObj();
 }
+    
 
 void Write(JSONWriter& out, const aiMaterial& ai, bool is_elem = true)
 {
