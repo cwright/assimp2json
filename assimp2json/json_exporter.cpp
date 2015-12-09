@@ -19,6 +19,9 @@ Licensed under a 3-clause BSD license. See the LICENSE file for more information
 
 #define CURRENT_FORMAT_VERSION 100
 
+#define NODEBREAKCOUNT 1000
+#define MESHBREAKCOUNT 1000
+
 // grab scoped_ptr from assimp to avoid a dependency on boost. 
 #include <assimp/../../code/BoostWorkaround/boost/scoped_ptr.hpp>
 
@@ -71,7 +74,7 @@ public:
 	}
 
 public:
-
+    int currentNode;
 	void Flush()	{
 		const std::string s = buff.str();
 		out.Write(s.c_str(),s.length(),1);
@@ -182,6 +185,10 @@ public:
 			first = false;
 		}
 	}
+    
+    void MarkSplit() {
+        buff << "\n\n//SPLIT\n\n";
+    }
 
 private:
 
@@ -446,12 +453,20 @@ void Write(JSONWriter& out, const aiMesh& ai, bool is_elem = true)
 }
 
 
-void Write(JSONWriter& out, const aiNode& ai, bool is_elem = true)
+void Write(JSONWriter& out, const aiNode& ai, bool is_elem = true, int parentID = 0)
 {
 	out.StartObj(is_elem);
 
 	out.Key("name");
 	out.SimpleValue(ai.mName);
+    
+    out.Key("id");
+    out.SimpleValue(out.currentNode);
+    int thisNode = out.currentNode;
+    if (out.currentNode != 0) {
+        out.Key("parent");
+        out.SimpleValue(parentID);
+    }
 
 	out.Key("transformation");
 	Write(out,ai.mTransformation,false);
@@ -461,15 +476,6 @@ void Write(JSONWriter& out, const aiNode& ai, bool is_elem = true)
 		out.StartArray();
 		for(unsigned int n = 0; n < ai.mNumMeshes; ++n) {
 			out.Element(ai.mMeshes[n]);
-		}
-		out.EndArray();
-	}
-
-	if(ai.mNumChildren) {
-		out.Key("children");
-		out.StartArray();
-		for(unsigned int n = 0; n < ai.mNumChildren; ++n) {
-			Write(out,*ai.mChildren[n]);
 		}
 		out.EndArray();
 	}
@@ -532,6 +538,30 @@ void Write(JSONWriter& out, const aiNode& ai, bool is_elem = true)
     }
     
 	out.EndObj();
+    if(ai.mNumChildren) {
+        //flatten instead of nest..
+        
+        //out.Key("children");
+        //out.StartArray();
+        
+        for(unsigned int n = 0; n < ai.mNumChildren; ++n) {
+            out.currentNode++;
+            //generate file split here
+            if ((out.currentNode % NODEBREAKCOUNT) == 0) {
+                out.EndArray(); //break out of nodes
+                out.EndObj(); //break out of main object
+                out.MarkSplit();
+                out.StartObj();
+                out.Key("nodes");
+                out.StartArray();
+            }
+            
+            Write(out,*ai.mChildren[n], true, thisNode);
+        }
+
+        
+        //out.EndArray();
+    }
 }
     
 
@@ -815,9 +845,16 @@ void Write(JSONWriter& out, const aiScene& ai)
 	out.Key("__metadata__");
 	WriteFormatInfo(out);
 
-	out.Key("rootnode");
-	Write(out,*ai.mRootNode, false);
-
+//  old:
+//	out.Key("rootnode");
+    out.Key("nodes");
+    //converted to flat array with back referenced parent id values from nested tree with children arrays, easier to split files, enables asynx parsing on client.
+    out.StartArray();
+    //traverse the scenegraph.. last param for writenode is now parent value, write handles file splits also.
+    out.currentNode = 0;
+    Write(out,*ai.mRootNode, true, out.currentNode);
+    out.EndArray();
+    
 	out.Key("flags");
 	out.SimpleValue(ai.mFlags);
 
@@ -825,7 +862,18 @@ void Write(JSONWriter& out, const aiScene& ai)
 		out.Key("meshes");
 		out.StartArray();
 		for(unsigned int n = 0; n < ai.mNumMeshes; ++n) {
+            
 			Write(out,*ai.mMeshes[n]);
+            
+            //generate file split here
+            if ((n % MESHBREAKCOUNT) == 0) {
+                out.EndArray(); //break out of nodes
+                out.EndObj(); //break out of main object
+                out.MarkSplit();
+                out.StartObj();
+                out.Key("meshes");
+                out.StartArray();
+            }
 		}
 		out.EndArray();
 	}
