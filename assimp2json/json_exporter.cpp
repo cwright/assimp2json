@@ -205,11 +205,21 @@ private:
 		t.reserve(s.length);
 		for(size_t i = 0; i < s.length; ++i) {
 			
-			if (s.data[i] == '\\' || s.data[i] == '\'' || s.data[i] == '\"') {
+			if (s.data[i] == '\\' || s.data[i] == '\"') {
 				t.push_back('\\');
 			}
-
-			t.push_back(s.data[i]);
+			//completely drop single quotes, not in json spec.
+			//convert repeating single quotes to double, IFCstep format uses this sometimes in names. 
+			if (s.data[i] == '\''){
+			  if (i != 0){
+			      if (s.data[i-1] == '\''){
+				t.push_back('\\');
+				t.push_back('\"');
+			      }
+			    }
+			}else{
+			  t.push_back(s.data[i]);
+			}
 		}
 		stream << "\"";
 		stream << t;
